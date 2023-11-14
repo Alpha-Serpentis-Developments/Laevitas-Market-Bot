@@ -1,2 +1,2 @@
-# Laevitas-Market-Bot
-Open-source Discord bot that returns derivatives data from Laevitas
+# Laevitas Market Discord Bot
+### This Discord bot was commissioned by [Laevitas](https://app.laevitas.ch/home)
