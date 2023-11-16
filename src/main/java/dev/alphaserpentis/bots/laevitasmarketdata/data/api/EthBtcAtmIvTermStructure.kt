@@ -5,7 +5,7 @@ data class EthBtcAtmIvTermStructure(
     val data: Map<String, List<EthBtcAtmIvTermStructureEntry>>
 ) {
     data class EthBtcAtmIvTermStructureEntry(
-        val maturity: Double,
+        val maturity: String,
         val iv: Double
     )
 }

@@ -22,7 +22,7 @@ open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>
         .setUseRatelimits(true)
         .setRatelimitLength(30)
 ) {
-    private val laevitasService: LaevitasService = LaevitasDataHandler.service
+    private val laevitasService: LaevitasService? = LaevitasDataHandler.service
 
     override fun runCommand(userId: Long, event: SlashCommandInteractionEvent): CommandResponse<MessageEmbed> {
         val eb = EmbedBuilder()
@@ -52,7 +52,7 @@ open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>
             .addOption(OptionType.STRING, "type", "Type of future", true, true)
             .addOption(OptionType.INTEGER, "period", "The period to get OI for", true, true)
         val cmdData = (getJDACommandData(commandType, name, description) as SlashCommandData)
-            .addSubcommands(futuresSubcommand, optionsSubcommand)
+            .addSubcommands(futuresSubcommand, optionsSubcommand, oiChangeSubcommand)
 
         jda.upsertCommand(cmdData).queue { cmd -> setGlobalCommandId(cmd.idLong) }
     }

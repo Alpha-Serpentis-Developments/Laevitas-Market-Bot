@@ -1,6 +1,7 @@
 package dev.alphaserpentis.bots.laevitasmarketdata.commands
 
 import dev.alphaserpentis.bots.laevitasmarketdata.api.LaevitasService
+import dev.alphaserpentis.bots.laevitasmarketdata.data.api.PerpetualFunding
 import dev.alphaserpentis.bots.laevitasmarketdata.handlers.LaevitasDataHandler
 import dev.alphaserpentis.coffeecore.commands.BotCommand
 import dev.alphaserpentis.coffeecore.data.bot.CommandResponse
@@ -19,7 +20,14 @@ open class PerpFunding : BotCommand<MessageEmbed, SlashCommandInteractionEvent>(
         .setUseRatelimits(true)
         .setRatelimitLength(30)
 ) {
-    private val laevitasService: LaevitasService = LaevitasDataHandler.service
+    private val laevitasService: LaevitasService? = LaevitasDataHandler.service
+    private val tableHeader = """
+        ```
+        ╒═══════════════════════╤════════════╕
+        │ Exchange Pair         | Rate       |
+        ╞═══════════════════════╪════════════╡
+    """.trimIndent()
+    private val tableFooter = "╘═══════════════════════╧════════════╛```"
 
     override fun runCommand(userId: Long, event: SlashCommandInteractionEvent): CommandResponse<MessageEmbed> {
         val eb = EmbedBuilder()
@@ -49,10 +57,70 @@ open class PerpFunding : BotCommand<MessageEmbed, SlashCommandInteractionEvent>(
     }
 
     private fun configureEmbedBuilder(eb: EmbedBuilder, currency: String, averaged: Boolean) {
-        val funding = getFundingList(currency)
+        val funding = getFunding(currency)
+        val date = LaevitasDataHandler.getUTCTimeFromMilliseconds(funding.date * 1000).plus(" UTC")
         val sb = StringBuilder()
-        sb.append("# Funding rates for $currency").append("\n")
+
+        sb.append("# Funding Rates for $$currency").append("\n")
+        sb.append(tableHeader).append("\n")
+
+        if (averaged)
+            generateAveragedTable(sb, funding.data)
+        else
+            generateNonAveragedTable(sb, funding.data)
+
+        sb.append(tableFooter);
+        eb.setDescription(sb.toString())
+        eb.setFooter("Last Updated: $date")
     }
 
-    private fun getFundingList(currency: String) = laevitasService.perpetualFunding(currency).data
+    private fun generateNonAveragedTable(sb: StringBuilder, list: List<PerpetualFunding.PerpetualFundingEntry>) {
+        for(entry in list) {
+            var exchangePair: String = entry.market.plus(" - ").plus(entry.symbol)
+            val fundingRate: String = entry.funding.toString().plus('%')
+
+            if(exchangePair.length > 21) exchangePair = exchangePair.substring(0, 18).plus("...")
+
+            sb.append("| ${exchangePair.padEnd(21)} | ${fundingRate.padEnd(10)} |\n")
+        }
+    }
+
+    private fun generateAveragedTable(sb: StringBuilder, list: List<PerpetualFunding.PerpetualFundingEntry>) {
+        var currentExchange = ""
+        var currentValue = 0.0
+        var currentCount = 0
+        var totalValue = 0.0
+        var totalCount = 0
+
+        for(entry in list) {
+            if(currentExchange == entry.market) {
+                currentValue += entry.funding
+                currentCount++
+            } else {
+                if(currentExchange.isNotEmpty()) {
+                    val average = currentValue / currentCount
+                    var exchangePair: String = currentExchange
+
+                    if(exchangePair.length > 21) exchangePair = exchangePair.substring(0, 18).plus("...")
+
+                    sb.append("| ${exchangePair.padEnd(21)} | ${"%.5f".format(average).plus('%').padEnd(10)} |\n")
+                }
+
+                currentExchange = entry.market
+                currentValue = entry.funding
+                currentCount = 1
+            }
+
+            totalValue += entry.funding
+            totalCount++
+        }
+
+        if(totalValue > 0 && totalCount > 0) {
+            val average = totalValue / totalCount
+
+            sb.append("| ${"AVERAGED".padEnd(21)} | ${"%.5f".format(average).plus('%').padEnd(10)} |\n")
+        }
+    }
+
+    private fun getFunding(currency: String) = laevitasService!!.perpetualFunding(currency)
 }
