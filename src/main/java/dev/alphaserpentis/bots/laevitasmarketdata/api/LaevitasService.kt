@@ -2,6 +2,8 @@ package dev.alphaserpentis.bots.laevitasmarketdata.api
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import dev.alphaserpentis.bots.laevitasmarketdata.data.api.Catalog
+import dev.alphaserpentis.bots.laevitasmarketdata.data.deserializer.MainParamDeserializer
 import io.reactivex.rxjava3.core.Single
 import retrofit2.HttpException
 import retrofit2.Retrofit
@@ -9,13 +11,21 @@ import retrofit2.adapter.rxjava3.RxJava3CallAdapterFactory
 import retrofit2.converter.gson.GsonConverterFactory
 
 class LaevitasService(private val apiKey: String) {
-    private val gson: Gson = GsonBuilder().setLenient().serializeNulls().create()
+    private val gson: Gson = GsonBuilder()
+        .setLenient()
+        .serializeNulls()
+        .registerTypeAdapter(Catalog.MainParam::class.java, MainParamDeserializer())
+        .create()
     val api: LaevitasEndpoints = Retrofit.Builder()
         .baseUrl(REST_API_URL)
         .addCallAdapterFactory(RxJava3CallAdapterFactory.create())
         .addConverterFactory(GsonConverterFactory.create(gson))
         .build()
         .create(LaevitasEndpoints::class.java)
+
+    fun catalog() = execute(api.getCatalog())
+
+    fun altCurrency() = execute(api.getAltCurrency(apiKey))
 
     fun atmTermStructure(currency: String) = execute(api.getAtmTermStructure(apiKey, currency))
 

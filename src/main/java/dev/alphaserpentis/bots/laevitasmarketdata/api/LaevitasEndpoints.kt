@@ -9,6 +9,16 @@ import retrofit2.http.Path
 
 interface LaevitasEndpoints {
     @Headers("Content-Type: application/json")
+    @GET("/api/catalog/v2")
+    fun getCatalog(): Single<Catalog>
+
+    @Headers("Content-Type: application/json")
+    @GET("/analytics/futures/alt_currency")
+    fun getAltCurrency(
+        @Header("apiKey") apiKey: String
+    ): Single<AltCurrencies>
+
+    @Headers("Content-Type: application/json")
     @GET("/analytics/options/model_charts/term_structure_atm/{currency}")
     fun getAtmTermStructure(
         @Header("apiKey") apiKey: String,
