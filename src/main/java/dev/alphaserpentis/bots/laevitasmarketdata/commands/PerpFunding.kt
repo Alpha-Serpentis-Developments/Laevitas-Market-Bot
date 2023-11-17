@@ -44,6 +44,7 @@ open class PerpFunding : BotCommand<MessageEmbed, SlashCommandInteractionEvent>(
             OptionType.STRING,
             "currency",
             "The currency to get funding rates for",
+            true,
             true
         )
         val averagedOption = OptionData(
@@ -69,13 +70,13 @@ open class PerpFunding : BotCommand<MessageEmbed, SlashCommandInteractionEvent>(
         else
             generateNonAveragedTable(sb, funding.data)
 
-        sb.append(tableFooter);
+        sb.append(tableFooter)
         eb.setDescription(sb.toString())
         eb.setFooter("Last Updated: $date")
     }
 
     private fun generateNonAveragedTable(sb: StringBuilder, list: List<PerpetualFunding.PerpetualFundingEntry>) {
-        for(entry in list) {
+        list.sortedByDescending { it.funding }.forEach { entry ->
             var exchangePair: String = entry.market.plus(" - ").plus(entry.symbol)
             val fundingRate: String = entry.funding.toString().plus('%')
 
@@ -92,7 +93,7 @@ open class PerpFunding : BotCommand<MessageEmbed, SlashCommandInteractionEvent>(
         var totalValue = 0.0
         var totalCount = 0
 
-        for(entry in list) {
+        list.sortedByDescending { it.funding }.forEach { entry ->
             if(currentExchange == entry.market) {
                 currentValue += entry.funding
                 currentCount++

@@ -9,9 +9,12 @@ import dev.alphaserpentis.bots.laevitasmarketdata.data.api.Catalog
 import java.lang.reflect.Type
 
 class MainParamDeserializer : JsonDeserializer<Catalog.MainParam> {
-    override fun deserialize(json: JsonElement?, typeOfT: Type?, context: JsonDeserializationContext?): Catalog.MainParam {
-        val jsonObject = json!!.asJsonObject
-
+    override fun deserialize(
+        json: JsonElement,
+        typeOfT: Type,
+        context: JsonDeserializationContext
+    ): Catalog.MainParam {
+        val jsonObject = json.asJsonObject
         val maturities = deserializeSubParam(jsonObject.getAsJsonObject("maturities"), context)
         val strikes = deserializeSubParam(jsonObject.getAsJsonObject("strikes"), context)
         val currency = deserializeCurrencyParam(jsonObject.getAsJsonObject("currency"), context)
@@ -19,8 +22,11 @@ class MainParamDeserializer : JsonDeserializer<Catalog.MainParam> {
         return Catalog.MainParam(maturities, strikes, currency)
     }
 
-    private fun deserializeSubParam(json: JsonObject, context: JsonDeserializationContext?): Catalog.MainParam.SubParam {
-        val name = json.get("name").asString
+    private fun deserializeSubParam(
+        json: JsonObject,
+        context: JsonDeserializationContext
+    ): Catalog.MainParam.SubParam {
+        val name = json["name"].asString
         val dataMap = mutableMapOf<String, Map<String, List<String>>>()
         val dataJsonObject = json.getAsJsonObject("data")
 
@@ -31,7 +37,8 @@ class MainParamDeserializer : JsonDeserializer<Catalog.MainParam> {
 
                 if (isMapToList) {
                     val type = object : TypeToken<Map<String, List<String>>>() {}.type
-                    val innerMap: Map<String, List<String>> = context!!.deserialize(innerJsonObject, type)
+                    val innerMap: Map<String, List<String>> = context.deserialize(innerJsonObject, type)
+
                     dataMap[exchange] = innerMap
                 }
             }
@@ -40,10 +47,13 @@ class MainParamDeserializer : JsonDeserializer<Catalog.MainParam> {
         return Catalog.MainParam.SubParam(name, dataMap)
     }
 
-    private fun deserializeCurrencyParam(json: JsonObject, context: JsonDeserializationContext?): Catalog.MainParam.CurrencyParam {
-        val name = json.get("name").asString
+    private fun deserializeCurrencyParam(
+        json: JsonObject,
+        context: JsonDeserializationContext
+    ): Catalog.MainParam.CurrencyParam {
+        val name = json["name"].asString
         val type = object : TypeToken<List<String>>() {}.type
-        val data = context!!.deserialize<List<String>>(json.get("data"), type)
+        val data = context.deserialize<List<String>>(json["data"], type)
 
         return Catalog.MainParam.CurrencyParam(name, data)
     }

@@ -31,6 +31,7 @@ object Launcher {
             true
         )
         val builder = CoffeeCoreBuilder<DefaultShardManagerBuilder>()
+            .setAdditionalListeners(LaevitasDataHandler())
             .setBuilderConfiguration(CoffeeCoreBuilder.BuilderConfiguration.DEFAULT)
             .setSettings(botSettings)
 
