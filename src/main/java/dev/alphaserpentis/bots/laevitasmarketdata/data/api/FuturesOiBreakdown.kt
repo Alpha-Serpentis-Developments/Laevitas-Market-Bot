@@ -6,8 +6,8 @@ data class FuturesOiBreakdown(
 ) {
     data class BreakdownData(
         val all: FuturesOiForMarket,
-        val future: FuturesOiForMarket,
-        val perpetual: FuturesOiForMarket
+        val future: FuturesOiForMarket?,
+        val perpetual: FuturesOiForMarket?
     ) {
         data class FuturesOiForMarket(
             val usd: Map<String, Double>,

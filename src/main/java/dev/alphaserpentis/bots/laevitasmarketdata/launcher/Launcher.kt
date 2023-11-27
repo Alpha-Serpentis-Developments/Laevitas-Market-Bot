@@ -1,9 +1,6 @@
 package dev.alphaserpentis.bots.laevitasmarketdata.launcher
 
-import dev.alphaserpentis.bots.laevitasmarketdata.commands.FuturesCurve
-import dev.alphaserpentis.bots.laevitasmarketdata.commands.OpenInterest
-import dev.alphaserpentis.bots.laevitasmarketdata.commands.PerpFunding
-import dev.alphaserpentis.bots.laevitasmarketdata.commands.VolumeBreakdown
+import dev.alphaserpentis.bots.laevitasmarketdata.commands.*
 import dev.alphaserpentis.bots.laevitasmarketdata.handlers.LaevitasDataHandler
 import dev.alphaserpentis.coffeecore.core.CoffeeCore
 import dev.alphaserpentis.coffeecore.core.CoffeeCoreBuilder
@@ -32,7 +29,6 @@ object Launcher {
         )
         val builder = CoffeeCoreBuilder<DefaultShardManagerBuilder>()
             .setAdditionalListeners(LaevitasDataHandler())
-            .setBuilderConfiguration(CoffeeCoreBuilder.BuilderConfiguration.DEFAULT)
             .setSettings(botSettings)
 
         core = builder.build(dotenv["DISCORD_TOKEN"])
@@ -43,7 +39,8 @@ object Launcher {
             PerpFunding(),
             FuturesCurve(),
             OpenInterest(),
-            VolumeBreakdown()
+            VolumeBreakdown(),
+            GainersAndLosers()
         )
     }
 }

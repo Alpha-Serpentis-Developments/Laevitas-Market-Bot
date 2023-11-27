@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit
 class LaevitasDataHandler : ListenerAdapter() {
     override fun onCommandAutoCompleteInteraction(event: CommandAutoCompleteInteractionEvent) {
         val focusedOption = event.focusedOption
+        val subcommandName = event.subcommandName ?: return
 
         if(focusedOption.name == "currency") {
             event.replyChoiceStrings(cachedCurrencies.filter {
@@ -22,13 +23,13 @@ class LaevitasDataHandler : ListenerAdapter() {
                 }.take(25)
             ).queue()
         } else if(focusedOption.name == "type") {
-            if(event.subcommandName!! == "futures") {
+            if(subcommandName == "futures") {
                 event.replyChoiceStrings(typeOfExchanges).queue()
-            } else if(event.subcommandName!! == "options") {
+            } else if(subcommandName == "options") {
                 event.replyChoiceStrings(typeOfOptions).queue()
             }
         } else if(focusedOption.name == "period") {
-            event.replyChoiceLongs(listOfPeriods).queue()
+            event.replyChoiceStrings(listOfPeriods).queue()
         } else if(focusedOption.name == "market") {
             event.replyChoiceStrings(
                 cachedMarkets.filter {
@@ -36,23 +37,34 @@ class LaevitasDataHandler : ListenerAdapter() {
                 }.take(25)
             ).queue()
         } else if(focusedOption.name == "maturity") {
-            event.replyChoiceStrings(
-                cachedMaturities.filter {
-                    it.startsWith(focusedOption.value, true)
-                }.take(25)
-            ).queue()
+            val currency = event.getOption("currency")?.asString
+            val market = event.getOption("market")?.asString
+
+            if (market != null && currency != null) {
+                event.replyChoiceStrings(
+                    cachedMaturities[market]?.get(currency)?.filter {
+                        it.startsWith(focusedOption.value, true)
+                    }?.take(25) ?: emptyList()
+                ).queue()
+            } else {
+                event.replyChoices(emptyList()).queue()
+            }
+        } else {
+            event.replyChoices(emptyList()).queue()
         }
     }
 
     companion object {
         private val LOGGER = LoggerFactory.getLogger(LaevitasDataHandler::class.java)
-        private val cachedMaturities: HashSet<String> = HashSet()
-        private val cachedMarkets: HashSet<String> = HashSet()
-        private val cachedCurrencies: HashSet<String> = HashSet()
+        private val cachedMaturities: HashMap<String, HashMap<String, HashSet<String>>> = HashMap()
+        private val cachedMarkets: HashSet<String> = HashSet(15)
+        private val cachedCurrencies: HashSet<String> = HashSet(350)
         private val cachedStrikes: HashMap<String, List<Double>> = HashMap()
         private val typeOfExchanges: List<String> = listOf("C", "D")
         private val typeOfOptions: List<String> = listOf("future", "perpetual", "all")
-        private val listOfPeriods: List<Long> = listOf(1, 2, 4, 8, 12, 18, 24, 48, 168, 336, 504, 720)
+        private val listOfPeriods: List<String> = listOf(
+            "1", "2", "4", "8", "12", "18", "24", "48", "168", "336", "504", "720", "ytd"
+        )
         private var executorService: ScheduledExecutorService? = null
         private var scheduledFuture: ScheduledFuture<*>? = null
         var service: LaevitasService? = null
@@ -75,7 +87,7 @@ class LaevitasDataHandler : ListenerAdapter() {
                         }
                     },
                     0,
-                    1,
+                    3,
                     TimeUnit.HOURS
                 )
             }
@@ -83,11 +95,22 @@ class LaevitasDataHandler : ListenerAdapter() {
 
         private fun updateCaches() {
             val catalog = service!!.catalog()
-            val maturities = catalog.params.maturities.data.keys
             val currencies = catalog.params.currency.data
 
-            cachedMaturities.addAll(maturities)
+            cachedCurrencies.clear()
+            cachedMaturities.clear()
+            cachedMarkets.clear()
+            cachedStrikes.clear()
+
             cachedCurrencies.addAll(currencies)
+
+            catalog.params.maturities.data.forEach { (exchange, currencyToMaturity) ->
+                currencyToMaturity.forEach { (currency, maturity) ->
+                    cachedMaturities.getOrPut(exchange) { HashMap() }
+                        .getOrPut(currency) { HashSet() }
+                        .addAll(maturity)
+                }
+            }
 
             catalog.params.strikes.data.forEach { (exchange, currencyToStrike) ->
                 cachedMarkets.add(exchange)
@@ -98,7 +121,7 @@ class LaevitasDataHandler : ListenerAdapter() {
             }
         }
 
-        fun getUTCTimeFromMilliseconds(milliseconds: Long): String = DateTimeFormatter
+        fun getUTCTimeFromMilli(milliseconds: Long): String = DateTimeFormatter
             .ofPattern("HH:mm:ss yyyy-MM-dd")
             .withZone(ZoneOffset.UTC)
             .format(Instant.ofEpochMilli(milliseconds))

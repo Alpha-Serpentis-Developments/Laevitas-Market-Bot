@@ -1,6 +1,7 @@
 package dev.alphaserpentis.bots.laevitasmarketdata.commands
 
 import dev.alphaserpentis.bots.laevitasmarketdata.api.LaevitasService
+import dev.alphaserpentis.bots.laevitasmarketdata.data.api.OptionsOiByStrike
 import dev.alphaserpentis.bots.laevitasmarketdata.handlers.LaevitasDataHandler
 import dev.alphaserpentis.coffeecore.commands.BotCommand
 import dev.alphaserpentis.coffeecore.data.bot.CommandResponse
@@ -46,7 +47,7 @@ open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>
         )
             .addOption(OptionType.STRING, "currency", "The currency to get OI for", true, true)
             .addOption(OptionType.STRING, "market", "The market to get OI for", true, true)
-            .addOption(OptionType.STRING, "maturity", "The maturity to get OI for", true, true)
+            .addOption(OptionType.STRING, "maturity", "The maturity to get OI for", false, true)
         val oiChangeSubcommand = SubcommandData(
             "change",
             "View the OI winners and losers for futures of the specified currency"
@@ -68,14 +69,14 @@ open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>
                 val currency = event.getOption("currency")!!.asString
                 val type = event.getOption("type")!!.asString
 
-//                generateFuturesOi(eb, currency, type)
+                generateFuturesOi(eb, currency, type)
             }
             "options" -> {
                 val currency = event.getOption("currency")!!.asString
                 val market = event.getOption("market")!!.asString
-                val maturity = event.getOption("maturity")!!.asString
+                val maturity = event.getOption("maturity")?.asString
 
-//                generateOptionsOi(eb, currency, market, maturity)
+                generateOptionsOi(eb, currency, market, maturity)
             }
             "change" -> {
                 val currency = event.getOption("currency")!!.asString
@@ -87,10 +88,83 @@ open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>
         }
     }
 
+    private fun generateFuturesOi(eb: EmbedBuilder, currency: String, type: String) {
+        val nf = NumberFormat.getCurrencyInstance()
+        val oiBreakdown = laevitasService!!.futuresOiBreakdown(currency, type)
+        val sb = StringBuilder()
+        val date = LaevitasDataHandler.getUTCTimeFromMilli(oiBreakdown.date * 1000).plus(" UTC")
+        val typeName = if (type == "C") "Centralized" else "Decentralized"
+        val data = oiBreakdown.data
+
+        eb.setTitle("Open Interest for $$currency ($typeName)")
+
+        sb.append("Data formatted as:\n\n**Market**\n")
+        sb.append("  - All: Open Interest (Notional)\n")
+        sb.append("  - Futures: Open Interest (Notional)\n")
+        sb.append("  - Perpetual: Open Interest (Notional)\n\n")
+
+        for (exchange in data.all.usd.keys) {
+            val allOi = data.all.usd[exchange] ?: continue
+            val allNotional = data.all.notional[exchange] ?: continue
+            val futuresOi = data.future?.usd?.get(exchange)
+            val futuresNotional = data.future?.notional?.get(exchange)
+            val perpetualOi = data.perpetual?.usd?.get(exchange)
+            val perpetualNotional = data.perpetual?.notional?.get(exchange)
+
+            sb.append("**$exchange**").append("\n")
+            sb.append(" - All: ${nf.format(allOi)} ($allNotional)").append("\n")
+            if (futuresOi != null && futuresNotional != null)
+                sb.append("  - Futures: ${nf.format(futuresOi)} ($futuresNotional)").append("\n")
+            if (perpetualOi != null && perpetualNotional != null)
+                sb.append("  - Perpetual: ${nf.format(perpetualOi)} ($perpetualNotional)").append("\n")
+        }
+
+        eb.setDescription(sb.toString())
+        eb.setFooter("Last Updated: $date")
+    }
+
+    private fun generateOptionsOi(eb: EmbedBuilder, currency: String, market: String, maturity: String?) {
+        val nf = NumberFormat.getCurrencyInstance()
+        val sb = StringBuilder()
+        val oiStrike: OptionsOiByStrike
+
+        if (maturity == null) { // Call the endpoint at /analytics/options/oi_strike_all/{market}/{currency}
+            oiStrike = laevitasService!!.optionsOiByStrike(market, currency)
+
+            eb.setTitle("Open Interest for $$currency ($market)")
+        } else { // Call the endpoint at /analytics/options/oi_strike/{market}/{currency}/{maturity}
+            oiStrike = laevitasService!!.optionsOiByStrike(market, currency, maturity)
+
+            eb.setTitle("Open Interest for $$currency-$maturity ($market)")
+        }
+
+        val date = LaevitasDataHandler.getUTCTimeFromMilli(oiStrike.date * 1000).plus(" UTC")
+        val sortedList = oiStrike.data.sortedBy { it.strike }
+
+        sb.append("Data formatted as:\n\n**Strike**\n")
+        sb.append(" - Call Notional (Call OI) / Put Notional (Put OI)\n\n")
+
+        for (item in sortedList) {
+            val strike = item.strike
+            val callV = item.callNotional
+            val putV = item.putNotional
+            val callText = "${nf.format(callV)} (${item.callOi})"
+            val putText = "${nf.format(putV)} (${item.putOi})"
+
+            if (callV + putV == 0.0) continue
+
+            sb.append("**${nf.format(strike)}**").append("\n")
+            sb.append(" - $callText / $putText").append("\n")
+        }
+
+        eb.setDescription(sb.toString())
+        eb.setFooter("Last Updated: $date")
+    }
+
     private fun generateTopGainersAndLosers(eb: EmbedBuilder, currency: String, type: String, period: Long) {
         val oiChange = laevitasService!!.futuresMarketsOiGainersAndLosers(currency, type, period.toString())
-        val date = LaevitasDataHandler.getUTCTimeFromMilliseconds(oiChange.date * 1000).plus(" UTC")
-        val sortedList = oiChange.data.sortedByDescending { it.oiChangePercent }
+        val date = LaevitasDataHandler.getUTCTimeFromMilli(oiChange.date * 1000).plus(" UTC")
+        val sortedList = oiChange.data.sortedByDescending { it.oiChange }
         val sb = StringBuilder()
         val nf = NumberFormat.getCurrencyInstance()
 
@@ -100,29 +174,38 @@ open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>
             sb.append("No data found")
         } else if (sortedList.size > 10) {
             val topFive = sortedList.subList(0, 5)
-            val bottomFive = sortedList.subList(sortedList.size - 5, sortedList.size).reversed()
+            val bottomFive = sortedList.subList(sortedList.size - 5, sortedList.size)
 
+            sb.append("Sorted by OI change").append("\n")
             sb.append("## Top 5 OI Gainers and Losers").append("\n")
 
             for (i in 0..4) {
-                sb.append("$i. **${topFive[i].market}**").append("\n")
-                sb.append(" - **Change**: ${nf.format(topFive[i].oiChange)} (${topFive[i].oiChangePercent}%)").append("\n")
-                sb.append(" - **Notional Change**: ${nf.format(topFive[i].oiNotionalChange)} (${topFive[i].oiNotionalChangePercent}%)").append("\n")
+                val item = topFive[i]
+
+                sb.append("$i. **${item.market}**").append("\n")
+                sb.append(" - **Change**: ${nf.format(item.oiChange)} (${item.oiChangePercent}%)").append("\n")
+                sb.append(" - **Notional Change**: ${nf.format(item.oiNotionalChange)} (${item.oiNotionalChangePercent}%)").append("\n")
             }
 
             sb.append("\n")
             sb.append("## Bottom 5 OI Gainers and Losers").append("\n")
 
             for (i in 0..4) {
-                sb.append("${i + 5}. **${bottomFive[i].market}**").append("\n")
-                sb.append(" - **Change**: ${nf.format(bottomFive[i].oiChange)} (${bottomFive[i].oiChangePercent}%)").append("\n")
-                sb.append(" - **Notional Change**: ${nf.format(bottomFive[i].oiNotionalChange)} (${bottomFive[i].oiNotionalChangePercent}%)").append("\n")
+                val item = bottomFive[i]
+
+                sb.append("${i + 5}. **${item.market}**").append("\n")
+                sb.append(" - **Change**: ${nf.format(item.oiChange)} (${item.oiChangePercent}%)").append("\n")
+                sb.append(" - **Notional Change**: ${nf.format(item.oiNotionalChange)} (${item.oiNotionalChangePercent}%)").append("\n")
             }
         } else {
+            sb.append("Sorted by OI change").append("\n")
+
             for (i in sortedList.indices) {
-                sb.append("$i. **${sortedList[i].market}**").append("\n")
-                sb.append(" - **Change**: ${nf.format(sortedList[i].oiChange)} (${sortedList[i].oiChangePercent}%)").append("\n")
-                sb.append(" - **Notional Change**: ${nf.format(sortedList[i].oiNotionalChange)} (${sortedList[i].oiNotionalChangePercent}%)").append("\n")
+                val item = sortedList[i]
+
+                sb.append("$i. **${item.market}**").append("\n")
+                sb.append(" - **Change**: ${nf.format(item.oiChange)} (${item.oiChangePercent}%)").append("\n")
+                sb.append(" - **Notional Change**: ${nf.format(item.oiNotionalChange)} (${item.oiNotionalChangePercent}%)").append("\n")
             }
         }
 

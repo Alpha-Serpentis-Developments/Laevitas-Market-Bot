@@ -59,7 +59,7 @@ open class PerpFunding : BotCommand<MessageEmbed, SlashCommandInteractionEvent>(
 
     private fun configureEmbedBuilder(eb: EmbedBuilder, currency: String, averaged: Boolean) {
         val funding = getFunding(currency)
-        val date = LaevitasDataHandler.getUTCTimeFromMilliseconds(funding.date * 1000).plus(" UTC")
+        val date = LaevitasDataHandler.getUTCTimeFromMilli(funding.date * 1000).plus(" UTC")
         val sb = StringBuilder()
 
         sb.append("# Funding Rates for $$currency").append("\n")
