@@ -1,6 +1,6 @@
 package dev.alphaserpentis.bots.laevitasmarketdata.data.api
 
-data class AtmTermStructure(
+data class AtmTermStructureData(
     val date: Long,
     val data: Data
 ) {

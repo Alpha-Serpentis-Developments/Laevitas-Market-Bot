@@ -2,7 +2,6 @@ package dev.alphaserpentis.bots.laevitasmarketdata.commands
 
 import dev.alphaserpentis.bots.laevitasmarketdata.api.LaevitasService
 import dev.alphaserpentis.bots.laevitasmarketdata.handlers.LaevitasDataHandler
-import dev.alphaserpentis.coffeecore.commands.BotCommand
 import dev.alphaserpentis.coffeecore.data.bot.CommandResponse
 import net.dv8tion.jda.api.EmbedBuilder
 import net.dv8tion.jda.api.JDA
@@ -12,8 +11,12 @@ import net.dv8tion.jda.api.interactions.commands.OptionType
 import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData
 import java.text.NumberFormat
 
-open class GainersAndLosers : BotCommand<MessageEmbed, SlashCommandInteractionEvent>(
-    BotCommandOptions(
+open class GainersAndLosers(laevitasService: LaevitasService) : LaevitasCommand(
+    laevitasService,
+    associatedPaths = mapOf(
+        "winners" to "/analytics/derivs/price_gainers/{market}/{type}/{period}"
+    ),
+    botCommandOptions = BotCommandOptions(
         "winners",
         "Get the winners and losers for a given exchange, type, and period"
     )
@@ -22,7 +25,6 @@ open class GainersAndLosers : BotCommand<MessageEmbed, SlashCommandInteractionEv
         .setUseRatelimits(true)
         .setRatelimitLength(30)
 ) {
-    private val laevitasService: LaevitasService? = LaevitasDataHandler.service
 
     override fun runCommand(userId: Long, event: SlashCommandInteractionEvent): CommandResponse<MessageEmbed> {
         val eb = EmbedBuilder()
@@ -52,12 +54,12 @@ open class GainersAndLosers : BotCommand<MessageEmbed, SlashCommandInteractionEv
     }
 
     private fun generateWinnersAndLosers(eb: EmbedBuilder, ex: String, type: String, period: String) {
-        val winners = laevitasService!!.derivsPriceGainers(ex, type, period)
+        val winners = laevitasService.derivsPriceGainers(ex, type, period)
         val utcTime = LaevitasDataHandler.getUTCTimeFromMilli(winners.date * 1000).plus(" UTC")
         val list = winners.data.asReversed()
 
         if (list.isEmpty()) {
-            eb.setDescription("No data found for the given exchange, type, and period")
+            handleInvalidArgument(eb)
         } else {
             val sb = StringBuilder()
             val specifiedList = if(list.size > 20) {
@@ -79,7 +81,7 @@ open class GainersAndLosers : BotCommand<MessageEmbed, SlashCommandInteractionEv
                     NumberFormat.getInstance().format(change)
                 }
 
-                sb.append("${index + 1}. ${data.symbol} - $changeStr%\n")
+                sb.append("${index + 1}. **${data.symbol}**: $changeStr%\n")
             }
 
             eb.setDescription(sb.toString())

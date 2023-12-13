@@ -13,24 +13,17 @@ interface LaevitasEndpoints {
     fun getCatalog(): Single<Catalog>
 
     @Headers("Content-Type: application/json")
-    @GET("/analytics/futures/alt_currency")
-    fun getAltCurrency(
-        @Header("apiKey") apiKey: String
-    ): Single<AltCurrencies>
-
-    @Headers("Content-Type: application/json")
     @GET("/analytics/options/model_charts/term_structure_atm/{currency}")
     fun getAtmTermStructure(
         @Header("apiKey") apiKey: String,
         @Path("currency") currency: String
-    ): Single<AtmTermStructure>
+    ): Single<AtmTermStructureData>
 
     @Headers("Content-Type: application/json")
-    @GET("/analytics/options/model_charts/vol_run/{currency}/{maturity}")
+    @GET("/analytics/options/model_charts/vol_run/{currency}/all")
     fun getVolRun(
         @Header("apiKey") apiKey: String,
-        @Path("currency") currency: String,
-        @Path("maturity") maturity: String
+        @Path("currency") currency: String
     ): Single<VolRun>
 
     @Headers("Content-Type: application/json")
@@ -41,6 +34,15 @@ interface LaevitasEndpoints {
         @Path("maturity") maturity: String,
         @Path("type") type: String
     ): Single<SkewData>
+
+    @Headers("Content-Type: application/json")
+    @GET("/analytics/options/model_charts/skew/{currency}/{maturity}/{type}")
+    fun getSkewDataAll(
+        @Header("apiKey") apiKey: String,
+        @Path("currency") currency: String,
+        @Path("type") type: String,
+        @Path("maturity") maturity: String = "all"
+    ): Single<SkewDataAllMaturities>
 
     @Headers("Content-Type: application/json")
     @GET("/analytics/options/eth-btc_atm_iv_term_structure")

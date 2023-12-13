@@ -3,7 +3,6 @@ package dev.alphaserpentis.bots.laevitasmarketdata.commands
 import dev.alphaserpentis.bots.laevitasmarketdata.api.LaevitasService
 import dev.alphaserpentis.bots.laevitasmarketdata.data.api.OptionsOiByStrike
 import dev.alphaserpentis.bots.laevitasmarketdata.handlers.LaevitasDataHandler
-import dev.alphaserpentis.coffeecore.commands.BotCommand
 import dev.alphaserpentis.coffeecore.data.bot.CommandResponse
 import net.dv8tion.jda.api.EmbedBuilder
 import net.dv8tion.jda.api.JDA
@@ -14,8 +13,14 @@ import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData
 import java.text.NumberFormat
 
-open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>(
-    BotCommandOptions(
+open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
+    laevitasService,
+    associatedPaths = mapOf(
+        "futures" to "/analytics/futures/oi_breakdown/{currency}/{type}",
+        "options" to "/analytics/options/oi_strike/{market}/{currency}/{maturity}",
+        "change" to "/analytics/futures/markets_oi_gainers_and_losers/{currency}/{option}/{param}"
+    ),
+    botCommandOptions = BotCommandOptions(
         "oi",
         "Obtain the open interest for futures and options"
     )
@@ -24,14 +29,9 @@ open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>
         .setUseRatelimits(true)
         .setRatelimitLength(30)
 ) {
-    private val laevitasService: LaevitasService? = LaevitasDataHandler.service
 
     override fun runCommand(userId: Long, event: SlashCommandInteractionEvent): CommandResponse<MessageEmbed> {
-        val eb = EmbedBuilder()
-
-        configureEmbedBuilder(eb, event)
-
-        return CommandResponse(isOnlyEphemeral, eb.build())
+        return CommandResponse(isOnlyEphemeral, configureEmbedBuilder(event).build())
     }
 
     override fun updateCommand(jda: JDA) {
@@ -61,7 +61,8 @@ open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>
         jda.upsertCommand(cmdData).queue { cmd -> setGlobalCommandId(cmd.idLong) }
     }
 
-    private fun configureEmbedBuilder(eb: EmbedBuilder, event: SlashCommandInteractionEvent) {
+    private fun configureEmbedBuilder(event: SlashCommandInteractionEvent): EmbedBuilder {
+        val eb = EmbedBuilder()
         val subcommandName = event.subcommandName!!
 
         when(subcommandName) {
@@ -86,11 +87,15 @@ open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>
                 generateTopGainersAndLosers(eb, currency, type, period)
             }
         }
+
+        if (eb.fields.isEmpty()) handleInvalidArgument(eb)
+
+        return eb
     }
 
     private fun generateFuturesOi(eb: EmbedBuilder, currency: String, type: String) {
         val nf = NumberFormat.getCurrencyInstance()
-        val oiBreakdown = laevitasService!!.futuresOiBreakdown(currency, type)
+        val oiBreakdown = laevitasService.futuresOiBreakdown(currency, type)
         val sb = StringBuilder()
         val date = LaevitasDataHandler.getUTCTimeFromMilli(oiBreakdown.date * 1000).plus(" UTC")
         val typeName = if (type == "C") "Centralized" else "Decentralized"
@@ -129,11 +134,11 @@ open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>
         val oiStrike: OptionsOiByStrike
 
         if (maturity == null) { // Call the endpoint at /analytics/options/oi_strike_all/{market}/{currency}
-            oiStrike = laevitasService!!.optionsOiByStrike(market, currency)
+            oiStrike = laevitasService.optionsOiByStrike(market, currency)
 
             eb.setTitle("Open Interest for $$currency ($market)")
         } else { // Call the endpoint at /analytics/options/oi_strike/{market}/{currency}/{maturity}
-            oiStrike = laevitasService!!.optionsOiByStrike(market, currency, maturity)
+            oiStrike = laevitasService.optionsOiByStrike(market, currency, maturity)
 
             eb.setTitle("Open Interest for $$currency-$maturity ($market)")
         }
@@ -162,7 +167,7 @@ open class OpenInterest : BotCommand<MessageEmbed, SlashCommandInteractionEvent>
     }
 
     private fun generateTopGainersAndLosers(eb: EmbedBuilder, currency: String, type: String, period: Long) {
-        val oiChange = laevitasService!!.futuresMarketsOiGainersAndLosers(currency, type, period.toString())
+        val oiChange = laevitasService.futuresMarketsOiGainersAndLosers(currency, type, period.toString())
         val date = LaevitasDataHandler.getUTCTimeFromMilli(oiChange.date * 1000).plus(" UTC")
         val sortedList = oiChange.data.sortedByDescending { it.oiChange }
         val sb = StringBuilder()

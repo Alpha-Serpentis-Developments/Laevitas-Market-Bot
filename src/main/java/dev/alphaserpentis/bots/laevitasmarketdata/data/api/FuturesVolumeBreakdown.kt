@@ -6,7 +6,7 @@ data class FuturesVolumeBreakdown(
 ) {
     data class BreakdownData(
         val all: FuturesVolumeForMarket,
-        val future: FuturesVolumeForMarket,
+        val future: FuturesVolumeForMarket?,
         val perpetual: FuturesVolumeForMarket
     ) {
         data class FuturesVolumeForMarket(

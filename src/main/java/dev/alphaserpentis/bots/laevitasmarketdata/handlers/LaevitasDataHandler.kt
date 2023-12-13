@@ -1,6 +1,9 @@
 package dev.alphaserpentis.bots.laevitasmarketdata.handlers
 
 import dev.alphaserpentis.bots.laevitasmarketdata.api.LaevitasService
+import dev.alphaserpentis.bots.laevitasmarketdata.commands.LaevitasCommand
+import dev.alphaserpentis.bots.laevitasmarketdata.launcher.Launcher
+import dev.alphaserpentis.coffeecore.handler.api.discord.commands.CommandsHandler
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent
 import net.dv8tion.jda.api.hooks.ListenerAdapter
 import org.slf4j.LoggerFactory
@@ -13,58 +16,50 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 class LaevitasDataHandler : ListenerAdapter() {
+    private var commandsHandler: CommandsHandler? = null
+    private val mappingOfCommands: HashMap<String, LaevitasCommand> = HashMap()
+
     override fun onCommandAutoCompleteInteraction(event: CommandAutoCompleteInteractionEvent) {
         val focusedOption = event.focusedOption
-        val subcommandName = event.subcommandName ?: return
+        val subcommandName = event.subcommandName ?: event.name
 
-        if(focusedOption.name == "currency") {
-            event.replyChoiceStrings(cachedCurrencies.filter {
-                    it.startsWith(focusedOption.value, true)
-                }.take(25)
-            ).queue()
-        } else if(focusedOption.name == "type") {
-            if(subcommandName == "futures") {
-                event.replyChoiceStrings(typeOfExchanges).queue()
-            } else if(subcommandName == "options") {
-                event.replyChoiceStrings(typeOfOptions).queue()
-            }
-        } else if(focusedOption.name == "period") {
-            event.replyChoiceStrings(listOfPeriods).queue()
-        } else if(focusedOption.name == "market") {
-            event.replyChoiceStrings(
-                cachedMarkets.filter {
-                    it.startsWith(focusedOption.value, true)
-                }.take(25)
-            ).queue()
-        } else if(focusedOption.name == "maturity") {
-            val currency = event.getOption("currency")?.asString
-            val market = event.getOption("market")?.asString
+        if (commandsHandler == null) commandsHandler = Launcher.core!!.commandsHandler
 
-            if (market != null && currency != null) {
-                event.replyChoiceStrings(
-                    cachedMaturities[market]?.get(currency)?.filter {
-                        it.startsWith(focusedOption.value, true)
-                    }?.take(25) ?: emptyList()
-                ).queue()
-            } else {
-                event.replyChoices(emptyList()).queue()
-            }
-        } else {
-            event.replyChoices(emptyList()).queue()
+        val command = findCommand(event.name) ?: return
+        val override = command.overrideAutocompleteMapping[focusedOption.name]
+
+        if (override != null) {
+            event.replyChoiceStrings(override).queue()
+            return
         }
+
+        val path = command.associatedPaths[subcommandName] ?: return
+        val params = pathToParams[path] ?: return
+        val choices = params[focusedOption.name] ?: return
+
+        event.replyChoiceStrings(obtainMostRelevantOptions(focusedOption.value, choices.toList())).queue()
+    }
+
+    private fun findCommand(name: String): LaevitasCommand? {
+        val command = mappingOfCommands[name]
+
+        if (command == null) {
+            val cmd = commandsHandler!!.getCommand(name)
+
+            if (cmd == null) {
+                return null
+            } else {
+                mappingOfCommands[name] = cmd as LaevitasCommand
+                return cmd
+            }
+        }
+
+        return command
     }
 
     companion object {
         private val LOGGER = LoggerFactory.getLogger(LaevitasDataHandler::class.java)
-        private val cachedMaturities: HashMap<String, HashMap<String, HashSet<String>>> = HashMap()
-        private val cachedMarkets: HashSet<String> = HashSet(15)
-        private val cachedCurrencies: HashSet<String> = HashSet(350)
-        private val cachedStrikes: HashMap<String, List<Double>> = HashMap()
-        private val typeOfExchanges: List<String> = listOf("C", "D")
-        private val typeOfOptions: List<String> = listOf("future", "perpetual", "all")
-        private val listOfPeriods: List<String> = listOf(
-            "1", "2", "4", "8", "12", "18", "24", "48", "168", "336", "504", "720", "ytd"
-        )
+        private val pathToParams: HashMap<String, HashMap<String, HashSet<String>>> = HashMap()
         private var executorService: ScheduledExecutorService? = null
         private var scheduledFuture: ScheduledFuture<*>? = null
         var service: LaevitasService? = null
@@ -95,29 +90,12 @@ class LaevitasDataHandler : ListenerAdapter() {
 
         private fun updateCaches() {
             val catalog = service!!.catalog()
-            val currencies = catalog.params.currency.data
 
-            cachedCurrencies.clear()
-            cachedMaturities.clear()
-            cachedMarkets.clear()
-            cachedStrikes.clear()
+            catalog.apiList.forEach {
+                val path = it.path
+                val params = it.params ?: return@forEach
 
-            cachedCurrencies.addAll(currencies)
-
-            catalog.params.maturities.data.forEach { (exchange, currencyToMaturity) ->
-                currencyToMaturity.forEach { (currency, maturity) ->
-                    cachedMaturities.getOrPut(exchange) { HashMap() }
-                        .getOrPut(currency) { HashSet() }
-                        .addAll(maturity)
-                }
-            }
-
-            catalog.params.strikes.data.forEach { (exchange, currencyToStrike) ->
-                cachedMarkets.add(exchange)
-
-                currencyToStrike.forEach {
-                    (currency, strike) -> cachedStrikes[currency] = strike.map { it.toDouble() }
-                }
+                pathToParams[path] = params
             }
         }
 
@@ -125,5 +103,10 @@ class LaevitasDataHandler : ListenerAdapter() {
             .ofPattern("HH:mm:ss yyyy-MM-dd")
             .withZone(ZoneOffset.UTC)
             .format(Instant.ofEpochMilli(milliseconds))
+
+        fun obtainMostRelevantOptions(currentInput: String, listOfOptions: List<String>) =
+            listOfOptions
+                .filter { it.startsWith(currentInput, true) }
+                .take(25)
     }
 }

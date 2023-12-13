@@ -9,7 +9,7 @@ import io.github.cdimascio.dotenv.Dotenv
 import net.dv8tion.jda.api.sharding.DefaultShardManagerBuilder
 
 object Launcher {
-    private var core: CoffeeCore? = null
+    var core: CoffeeCore? = null
 
     @JvmStatic
     fun main(args: Array<String>) {
@@ -35,12 +35,18 @@ object Launcher {
     }
 
     private fun registerCommands() {
+        val laevitasService = LaevitasDataHandler.service!!
+
         core!!.registerCommands(
-            PerpFunding(),
-            FuturesCurve(),
-            OpenInterest(),
-            VolumeBreakdown(),
-            GainersAndLosers()
+            PerpFunding(laevitasService),
+            FuturesTermStructure(laevitasService),
+            OpenInterest(laevitasService),
+            Volume(laevitasService),
+            GainersAndLosers(laevitasService),
+            VolSmile(laevitasService),
+            AtmTermStructure(laevitasService),
+            VolRun(laevitasService),
+            TopTraded(laevitasService)
         )
     }
 }

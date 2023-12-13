@@ -5,7 +5,7 @@ import com.google.gson.GsonBuilder
 import dev.alphaserpentis.bots.laevitasmarketdata.data.api.Catalog
 import dev.alphaserpentis.bots.laevitasmarketdata.data.deserializer.MainParamDeserializer
 import io.reactivex.rxjava3.core.Single
-import retrofit2.HttpException
+import org.slf4j.LoggerFactory
 import retrofit2.Retrofit
 import retrofit2.adapter.rxjava3.RxJava3CallAdapterFactory
 import retrofit2.converter.gson.GsonConverterFactory
@@ -16,7 +16,7 @@ class LaevitasService(private val apiKey: String) {
         .serializeNulls()
         .registerTypeAdapter(Catalog.MainParam::class.java, MainParamDeserializer())
         .create()
-    val api: LaevitasEndpoints = Retrofit.Builder()
+    private val api: LaevitasEndpoints = Retrofit.Builder()
         .baseUrl(REST_API_URL)
         .addCallAdapterFactory(RxJava3CallAdapterFactory.create())
         .addConverterFactory(GsonConverterFactory.create(gson))
@@ -25,17 +25,20 @@ class LaevitasService(private val apiKey: String) {
 
     fun catalog() = execute(api.getCatalog())
 
-    fun altCurrency() = execute(api.getAltCurrency(apiKey))
-
     fun atmTermStructure(currency: String) = execute(api.getAtmTermStructure(apiKey, currency))
 
-    fun volRun(currency: String, maturity: String) = execute(api.getVolRun(apiKey, currency, maturity))
+    fun volRun(currency: String) = execute(api.getVolRun(apiKey, currency))
 
     fun skewData(
         currency: String,
         maturity: String,
         type: String
     ) = execute(api.getSkewData(apiKey, currency, maturity, type))
+
+    fun skewData(
+        currency: String,
+        type: String
+    ) = execute(api.getSkewDataAll(apiKey, currency, type))
 
     fun ethBtcAtmIvTermStructure() = execute(api.getEthBtcAtmIvTermStructure(apiKey))
 
@@ -96,14 +99,15 @@ class LaevitasService(private val apiKey: String) {
     ) = execute(api.getDerivsPriceGainers(apiKey, market, type, period))
 
     companion object {
-        const val REST_API_URL = "https://api.laevitas.ch"
+        private val LOGGER = LoggerFactory.getLogger(LaevitasService::class.java)
+        private const val REST_API_URL = "https://api.laevitas.ch"
 
         fun <T : Any> execute(call: Single<T>): T {
             return try {
                 call.blockingGet()
-            } catch (e: HttpException) {
-                // TODO: Replace with SLF4J
-                throw RuntimeException(e)
+            } catch (e: Exception) {
+                LOGGER.error("Error executing call", e)
+                throw e
             }
         }
     }
