@@ -98,7 +98,7 @@ open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
         val oiBreakdown = laevitasService.futuresOiBreakdown(currency, type)
         val sb = StringBuilder()
         val date = LaevitasDataHandler.getUTCTimeFromMilli(oiBreakdown.date * 1000).plus(" UTC")
-        val typeName = if (type == "C") "Centralized" else "Decentralized"
+        val typeName = if (type.equals("C", ignoreCase = true)) "Centralized" else "Decentralized"
         val data = oiBreakdown.data
 
         eb.setTitle("Open Interest for $$currency ($typeName)")
