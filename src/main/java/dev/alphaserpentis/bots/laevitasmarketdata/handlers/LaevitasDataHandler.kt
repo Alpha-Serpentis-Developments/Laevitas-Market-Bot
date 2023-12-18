@@ -35,9 +35,18 @@ class LaevitasDataHandler : ListenerAdapter() {
 
         val path = command.associatedPaths[subcommandName] ?: return
         val params = pathToParams[path] ?: return
-        val choices = params[focusedOption.name] ?: return
+        val focusedOptionName = useAlternateFocusedName(focusedOption.name)
+        val choices = params[focusedOptionName] ?: params[focusedOption.name] ?: return
 
         event.replyChoiceStrings(obtainMostRelevantOptions(focusedOption.value, choices.toList())).queue()
+    }
+
+    private fun useAlternateFocusedName(name: String): String {
+        return when (name) {
+            "type" -> "option"
+            "period" -> "param"
+            else -> name
+        }
     }
 
     private fun findCommand(name: String): LaevitasCommand? {
@@ -108,5 +117,12 @@ class LaevitasDataHandler : ListenerAdapter() {
             listOfOptions
                 .filter { it.startsWith(currentInput, true) }
                 .take(25)
+                .sortedBy {
+                    try {
+                        it.toInt()
+                    } catch(ignored: Exception) {
+                        0
+                    }
+                }
     }
 }

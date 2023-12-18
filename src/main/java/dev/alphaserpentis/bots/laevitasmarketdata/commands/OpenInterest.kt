@@ -29,6 +29,8 @@ open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
         .setUseRatelimits(true)
         .setRatelimitLength(30)
 ) {
+    private val nf = NumberFormat.getInstance()
+    private val currencyNf = NumberFormat.getCurrencyInstance()
 
     override fun runCommand(userId: Long, event: SlashCommandInteractionEvent): CommandResponse<MessageEmbed> {
         return CommandResponse(isOnlyEphemeral, configureEmbedBuilder(event).build())
@@ -54,7 +56,7 @@ open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
         )
             .addOption(OptionType.STRING, "currency", "The currency to get OI for", true, true)
             .addOption(OptionType.STRING, "type", "Type of future", true, true)
-            .addOption(OptionType.INTEGER, "period", "The period to get OI for in hours", true, true)
+            .addOption(OptionType.STRING, "period", "The period to get OI for in hours", true, true)
         val cmdData = (getJDACommandData(commandType, name, description) as SlashCommandData)
             .addSubcommands(futuresSubcommand, optionsSubcommand, oiChangeSubcommand)
 
@@ -88,15 +90,15 @@ open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
             }
         }
 
-        if (eb.fields.isEmpty()) handleInvalidArgument(eb)
+        if (eb.fields.isEmpty() && eb.descriptionBuilder.isBlank()) handleInvalidArgument(eb)
 
         return eb
     }
 
     private fun generateFuturesOi(eb: EmbedBuilder, currency: String, type: String) {
-        val nf = NumberFormat.getCurrencyInstance()
         val oiBreakdown = laevitasService.futuresOiBreakdown(currency, type)
         val sb = StringBuilder()
+        val innerSb = StringBuilder()
         val date = LaevitasDataHandler.getUTCTimeFromMilli(oiBreakdown.date * 1000).plus(" UTC")
         val typeName = if (type.equals("C", ignoreCase = true)) "Centralized" else "Decentralized"
         val data = oiBreakdown.data
@@ -116,12 +118,17 @@ open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
             val perpetualOi = data.perpetual?.usd?.get(exchange)
             val perpetualNotional = data.perpetual?.notional?.get(exchange)
 
-            sb.append("**$exchange**").append("\n")
-            sb.append(" - All: ${nf.format(allOi)} ($allNotional)").append("\n")
+            innerSb.clear()
+            innerSb.append("**$exchange**").append("\n")
+            innerSb.append(" - All: ${currencyNf.format(allOi)} (${nf.format(allNotional)})").append("\n")
             if (futuresOi != null && futuresNotional != null)
-                sb.append("  - Futures: ${nf.format(futuresOi)} ($futuresNotional)").append("\n")
+                innerSb.append("  - Futures: ${currencyNf.format(futuresOi)} (${nf.format(futuresNotional)})").append("\n")
             if (perpetualOi != null && perpetualNotional != null)
-                sb.append("  - Perpetual: ${nf.format(perpetualOi)} ($perpetualNotional)").append("\n")
+                innerSb.append("  - Perpetual: ${currencyNf.format(perpetualOi)} (${nf.format(perpetualNotional)})").append("\n")
+
+            if (innerSb.length + sb.length > 4096) break
+
+            sb.append(innerSb.toString())
         }
 
         eb.setDescription(sb.toString())
@@ -129,8 +136,8 @@ open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
     }
 
     private fun generateOptionsOi(eb: EmbedBuilder, currency: String, market: String, maturity: String?) {
-        val nf = NumberFormat.getCurrencyInstance()
         val sb = StringBuilder()
+        val innerSb = StringBuilder()
         val oiStrike: OptionsOiByStrike
 
         if (maturity == null) { // Call the endpoint at /analytics/options/oi_strike_all/{market}/{currency}
@@ -153,13 +160,18 @@ open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
             val strike = item.strike
             val callV = item.callNotional
             val putV = item.putNotional
-            val callText = "${nf.format(callV)} (${item.callOi})"
-            val putText = "${nf.format(putV)} (${item.putOi})"
+            val callText = "${currencyNf.format(callV)} (${nf.format(item.callOi)})"
+            val putText = "${currencyNf.format(putV)} (${nf.format(item.putOi)})"
 
             if (callV + putV == 0.0) continue
 
-            sb.append("**${nf.format(strike)}**").append("\n")
-            sb.append(" - $callText / $putText").append("\n")
+            innerSb.clear()
+            innerSb.append("**${currencyNf.format(strike)}**").append("\n")
+            innerSb.append(" - $callText / $putText").append("\n")
+
+            if (innerSb.length + sb.length > 4096) break
+
+            sb.append(innerSb.toString())
         }
 
         eb.setDescription(sb.toString())
@@ -171,7 +183,6 @@ open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
         val date = LaevitasDataHandler.getUTCTimeFromMilli(oiChange.date * 1000).plus(" UTC")
         val sortedList = oiChange.data.sortedByDescending { it.oiChange }
         val sb = StringBuilder()
-        val nf = NumberFormat.getCurrencyInstance()
 
         eb.setTitle("Top OI Gainers and Losers for $$currency ($type)")
 
@@ -188,8 +199,8 @@ open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
                 val item = topFive[i]
 
                 sb.append("$i. **${item.market}**").append("\n")
-                sb.append(" - **Change**: ${nf.format(item.oiChange)} (${item.oiChangePercent}%)").append("\n")
-                sb.append(" - **Notional Change**: ${nf.format(item.oiNotionalChange)} (${item.oiNotionalChangePercent}%)").append("\n")
+                sb.append(" - **Change**: ${currencyNf.format(item.oiChange)} (${item.oiChangePercent}%)").append("\n")
+                sb.append(" - **Notional Change**: ${currencyNf.format(item.oiNotionalChange)} (${item.oiNotionalChangePercent}%)").append("\n")
             }
 
             sb.append("\n")
@@ -199,8 +210,8 @@ open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
                 val item = bottomFive[i]
 
                 sb.append("${i + 5}. **${item.market}**").append("\n")
-                sb.append(" - **Change**: ${nf.format(item.oiChange)} (${item.oiChangePercent}%)").append("\n")
-                sb.append(" - **Notional Change**: ${nf.format(item.oiNotionalChange)} (${item.oiNotionalChangePercent}%)").append("\n")
+                sb.append(" - **Change**: ${currencyNf.format(item.oiChange)} (${item.oiChangePercent}%)").append("\n")
+                sb.append(" - **Notional Change**: ${currencyNf.format(item.oiNotionalChange)} (${item.oiNotionalChangePercent}%)").append("\n")
             }
         } else {
             sb.append("Sorted by OI change").append("\n")
@@ -209,8 +220,8 @@ open class OpenInterest(laevitasService: LaevitasService) : LaevitasCommand(
                 val item = sortedList[i]
 
                 sb.append("$i. **${item.market}**").append("\n")
-                sb.append(" - **Change**: ${nf.format(item.oiChange)} (${item.oiChangePercent}%)").append("\n")
-                sb.append(" - **Notional Change**: ${nf.format(item.oiNotionalChange)} (${item.oiNotionalChangePercent}%)").append("\n")
+                sb.append(" - **Change**: ${currencyNf.format(item.oiChange)} (${item.oiChangePercent}%)").append("\n")
+                sb.append(" - **Notional Change**: ${currencyNf.format(item.oiNotionalChange)} (${item.oiNotionalChangePercent}%)").append("\n")
             }
         }
 
