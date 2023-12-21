@@ -45,6 +45,7 @@ class LaevitasDataHandler : ListenerAdapter() {
         return when (name) {
             "type" -> "option"
             "period" -> "param"
+            "exchange" -> "market"
             else -> name
         }
     }

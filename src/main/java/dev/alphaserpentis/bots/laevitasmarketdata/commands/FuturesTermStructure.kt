@@ -16,7 +16,7 @@ import net.dv8tion.jda.api.utils.FileUpload
 open class FuturesTermStructure(laevitasService: LaevitasService) : LaevitasCommand(
     laevitasService,
     associatedPaths = mapOf(
-        "curve" to "/analytics/futures/futures_curve/{currency}"
+        "curve" to "/analytics/futures/futures_curve/{currency}/{market}"
     ),
     botCommandOptions = BotCommandOptions(
         "curve",
@@ -30,7 +30,7 @@ open class FuturesTermStructure(laevitasService: LaevitasService) : LaevitasComm
 
     override fun runCommand(userId: Long, event: SlashCommandInteractionEvent): CommandResponse<MessageEmbed> {
         val currency = event.getOption("currency")!!.asString
-        val market = event.getOption("market")!!.asString
+        val market = event.getOption("market")?.asString
         val eb = EmbedBuilder()
         val chart = generateEmbed(eb, currency, market)
 
@@ -48,12 +48,12 @@ open class FuturesTermStructure(laevitasService: LaevitasService) : LaevitasComm
     override fun updateCommand(jda: JDA) {
         val cmdData = (getJDACommandData(commandType, name, description) as SlashCommandData)
             .addOption(OptionType.STRING, "currency", "The currency", true, true)
-            .addOption(OptionType.STRING, "market", "The market", true, true)
+            .addOption(OptionType.STRING, "market", "The market", false, true)
 
         jda.upsertCommand(cmdData).queue { cmd -> setGlobalCommandId(cmd.idLong) }
     }
 
-    private fun generateEmbed(eb: EmbedBuilder, currency: String, market: String): ByteArray {
+    private fun generateEmbed(eb: EmbedBuilder, currency: String, market: String?): ByteArray {
         val futuresCurve = laevitasService.futuresCurve(currency, market)
         val futuresCurveChart = generateChart(futuresCurve, currency, market)
         val date = LaevitasDataHandler.getUTCTimeFromMilli(futuresCurve.date * 1000).plus(" UTC")
@@ -65,19 +65,37 @@ open class FuturesTermStructure(laevitasService: LaevitasService) : LaevitasComm
         return futuresCurveChart
     }
 
-    private fun generateChart(futuresCurve: FuturesCurve, currency: String, market: String): ByteArray {
-        val data = ArrayList<Pair<String, Double>>()
+    private fun generateChart(futuresCurve: FuturesCurve, currency: String, market: String?): ByteArray {
+        if (market != null) {
+            val data = ArrayList<Pair<String, Double>>()
 
-        futuresCurve.data.forEach {
-            data.add(Pair(it.maturity, it.value))
+            futuresCurve.data.forEach {
+                data.add(Pair(it.maturity, it.value))
+            }
+
+            return ChartHandler.generateXYTimedSeriesChart(
+                "Futures Term Structure of $currency (${market})",
+                "Maturity",
+                "Price (USD)",
+                data
+            )
+        } else {
+            val data = HashMap<String, List<Pair<String, Double>>>()
+
+            futuresCurve.data.forEach {
+                val list: ArrayList<Pair<String, Double>> = (data[it.market] ?: ArrayList()) as ArrayList<Pair<String, Double>>
+
+                list.add(Pair(it.maturity, it.value))
+                data[it.market] = list
+            }
+
+            return ChartHandler.generateXYTimedSeriesChart(
+                "Futures Term Structure of $currency (All)",
+                "Maturity",
+                "Price (USD)",
+                data
+            )
         }
-
-        return ChartHandler.generateXYTimedSeriesChart(
-            "Futures Term Structure of $currency ($market)",
-            "Maturity",
-            "Price (USD)",
-            data
-        )
     }
 
 }
